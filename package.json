@@ -1,0 +1,28 @@
+{
+  "name": "appointment-service",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "serverless deploy",
+    "offline": "serverless offline start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.149",
+    "@types/node": "^22.15.29",
+    "serverless": "^4.15.1",
+    "serverless-auto-swagger": "^3.1.0",
+    "serverless-aws-documentation": "^1.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "aws-lambda": "^1.0.7",
+    "aws-sdk": "^2.1692.0",
+    "mysql2": "^3.14.1"
+  }
+}

@@ -1,0 +1,609 @@
+{
+  "C:\\Users\\jportocarrec\\OneDrive - RANSA COMERCIAL S.A\\Documentos\\proyectos\\reservas-app-back\\appointment-service\\serverless.yml": {
+    "versionFramework": "4.15.1",
+    "servicePath": "C:\\Users\\jportocarrec\\OneDrive - RANSA COMERCIAL S.A\\Documentos\\proyectos\\reservas-app-back\\appointment-service\\serverless.yml",
+    "serviceConfigFileName": "serverless.yml",
+    "service": {
+      "service": "appointment-service",
+      "plugins": [
+        "serverless-aws-documentation",
+        "serverless-auto-swagger"
+      ],
+      "provider": {
+        "name": "aws",
+        "runtime": "nodejs20.x",
+        "region": "us-east-1",
+        "profile": "default",
+        "environment": {
+          "APPOINTMENTS_TABLE": "AppointmentsTable",
+          "APPOINTMENTS_TOPIC_ARN": {
+            "Ref": "AppointmentsSNSTopic"
+          },
+          "DB_HOST": "tu-rds-endpoint",
+          "DB_USER": "admin",
+          "DB_PASS": "clave123",
+          "DB_NAME": "appointments",
+          "EVENT_BUS_NAME": "AppointmentEventBus"
+        },
+        "iamRoleStatements": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem"
+            ],
+            "Resource": "arn:aws:dynamodb:us-east-1:*:table/AppointmentsTable"
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sns:Publish"
+            ],
+            "Resource": [
+              {
+                "Ref": "AppointmentsSNSTopic"
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "events:PutEvents"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:UpdateItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "AppointmentsTable",
+                "Arn"
+              ]
+            }
+          }
+        ],
+        "stage": "dev",
+        "versionFunctions": true
+      },
+      "functions": {
+        "register": {
+          "handler": "src/handlers/appointment.register",
+          "events": [
+            {
+              "http": {
+                "path": "appointment",
+                "method": "post"
+              }
+            }
+          ],
+          "name": "appointment-service-dev-register"
+        },
+        "appointment_pe": {
+          "handler": "src/handlers/appointment_pe.handler",
+          "events": [
+            {
+              "sqs": {
+                "arn": {
+                  "Fn::GetAtt": [
+                    "SQSPE",
+                    "Arn"
+                  ]
+                }
+              }
+            }
+          ],
+          "name": "appointment-service-dev-appointment_pe"
+        },
+        "appointment_cl": {
+          "handler": "src/handlers/appointment_cl.handler",
+          "events": [
+            {
+              "sqs": {
+                "arn": {
+                  "Fn::GetAtt": [
+                    "SQSCL",
+                    "Arn"
+                  ]
+                }
+              }
+            }
+          ],
+          "name": "appointment-service-dev-appointment_cl"
+        },
+        "updateStatus": {
+          "handler": "src/handlers/appointment.updateStatus",
+          "events": [
+            {
+              "sqs": {
+                "arn": {
+                  "Fn::GetAtt": [
+                    "AppointmentStatusQueue",
+                    "Arn"
+                  ]
+                }
+              }
+            }
+          ],
+          "name": "appointment-service-dev-updateStatus"
+        },
+        "getByInsuredId": {
+          "handler": "src/handlers/appointment.getByInsuredId",
+          "events": [
+            {
+              "http": {
+                "path": "appointment/{insuredId}",
+                "method": "get",
+                "request": {
+                  "parameters": {
+                    "paths": {
+                      "insuredId": true
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "name": "appointment-service-dev-getByInsuredId"
+        }
+      },
+      "resources": {
+        "Resources": {
+          "AppointmentsTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+              "TableName": "AppointmentsTable",
+              "AttributeDefinitions": [
+                {
+                  "AttributeName": "insuredId",
+                  "AttributeType": "S"
+                },
+                {
+                  "AttributeName": "scheduleId",
+                  "AttributeType": "N"
+                }
+              ],
+              "KeySchema": [
+                {
+                  "AttributeName": "insuredId",
+                  "KeyType": "HASH"
+                },
+                {
+                  "AttributeName": "scheduleId",
+                  "KeyType": "RANGE"
+                }
+              ],
+              "BillingMode": "PAY_PER_REQUEST"
+            }
+          },
+          "AppointmentsSNSTopic": {
+            "Type": "AWS::SNS::Topic",
+            "Properties": {
+              "TopicName": "AppointmentsTopic"
+            }
+          },
+          "SQSPE": {
+            "Type": "AWS::SQS::Queue",
+            "Properties": {
+              "QueueName": "SQS_PE"
+            }
+          },
+          "SQSCL": {
+            "Type": "AWS::SQS::Queue",
+            "Properties": {
+              "QueueName": "SQS_CL"
+            }
+          },
+          "SQSPESubscription": {
+            "Type": "AWS::SNS::Subscription",
+            "Properties": {
+              "TopicArn": {
+                "Ref": "AppointmentsSNSTopic"
+              },
+              "Protocol": "sqs",
+              "Endpoint": {
+                "Fn::GetAtt": [
+                  "SQSPE",
+                  "Arn"
+                ]
+              },
+              "FilterPolicy": {
+                "countryISO": [
+                  "PE"
+                ]
+              },
+              "RawMessageDelivery": true
+            }
+          },
+          "SQSCLSubscription": {
+            "Type": "AWS::SNS::Subscription",
+            "Properties": {
+              "TopicArn": {
+                "Ref": "AppointmentsSNSTopic"
+              },
+              "Protocol": "sqs",
+              "Endpoint": {
+                "Fn::GetAtt": [
+                  "SQSCL",
+                  "Arn"
+                ]
+              },
+              "FilterPolicy": {
+                "countryISO": [
+                  "CL"
+                ]
+              },
+              "RawMessageDelivery": true
+            }
+          },
+          "SQSPolicyPE": {
+            "Type": "AWS::SQS::QueuePolicy",
+            "Properties": {
+              "Queues": [
+                {
+                  "Ref": "SQSPE"
+                }
+              ],
+              "PolicyDocument": {
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "SQS:SendMessage",
+                    "Resource": {
+                      "Fn::GetAtt": [
+                        "SQSPE",
+                        "Arn"
+                      ]
+                    },
+                    "Condition": {
+                      "ArnEquals": {
+                        "aws:SourceArn": {
+                          "Ref": "AppointmentsSNSTopic"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "SQSPolicyCL": {
+            "Type": "AWS::SQS::QueuePolicy",
+            "Properties": {
+              "Queues": [
+                {
+                  "Ref": "SQSCL"
+                }
+              ],
+              "PolicyDocument": {
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "SQS:SendMessage",
+                    "Resource": {
+                      "Fn::GetAtt": [
+                        "SQSCL",
+                        "Arn"
+                      ]
+                    },
+                    "Condition": {
+                      "ArnEquals": {
+                        "aws:SourceArn": {
+                          "Ref": "AppointmentsSNSTopic"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "AppointmentEventBus": {
+            "Type": "AWS::Events::EventBus",
+            "Properties": {
+              "Name": "AppointmentEventBus"
+            }
+          },
+          "AppointmentStatusQueue": {
+            "Type": "AWS::SQS::Queue",
+            "Properties": {
+              "QueueName": "AppointmentStatusQueue"
+            }
+          },
+          "AppointmentStatusQueuePolicy": {
+            "Type": "AWS::SQS::QueuePolicy",
+            "Properties": {
+              "Queues": [
+                {
+                  "Ref": "AppointmentStatusQueue"
+                }
+              ],
+              "PolicyDocument": {
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "SQS:SendMessage",
+                    "Resource": {
+                      "Fn::GetAtt": [
+                        "AppointmentStatusQueue",
+                        "Arn"
+                      ]
+                    },
+                    "Condition": {
+                      "ArnEquals": {
+                        "aws:SourceArn": {
+                          "Fn::GetAtt": [
+                            "AppointmentEventRule",
+                            "Arn"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "AppointmentEventRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+              "EventBusName": {
+                "Ref": "AppointmentEventBus"
+              },
+              "EventPattern": {
+                "detail-type": [
+                  "AppointmentCompleted"
+                ]
+              },
+              "Targets": [
+                {
+                  "Arn": {
+                    "Fn::GetAtt": [
+                      "AppointmentStatusQueue",
+                      "Arn"
+                    ]
+                  },
+                  "Id": "SendToSQS"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "custom": {
+        "autoswagger": {
+          "title": "Appointment API",
+          "apiType": "http",
+          "generateSwaggerOnDeploy": true
+        },
+        "documentation": {
+          "api": {
+            "info": {
+              "version": "1.0.0",
+              "title": "Appointment API",
+              "description": "API para agendar citas médicas"
+            }
+          },
+          "models": [
+            {
+              "name": "AppointmentRequest",
+              "contentType": "application/json",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "insuredId": {
+                    "type": "string"
+                  },
+                  "scheduleId": {
+                    "type": "number"
+                  },
+                  "countryISO": {
+                    "type": "string",
+                    "enum": [
+                      "PE",
+                      "CL"
+                    ]
+                  }
+                },
+                "required": [
+                  "insuredId",
+                  "scheduleId",
+                  "countryISO"
+                ]
+              }
+            }
+          ]
+        },
+        "register": {
+          "handler": "src/handlers/appointment.register",
+          "events": [
+            {
+              "http": {
+                "path": "appointment",
+                "method": "post",
+                "request": {
+                  "schemas": {
+                    "application/json": "AppointmentRequest"
+                  }
+                }
+              }
+            }
+          ],
+          "documentation": {
+            "summary": "Registrar cita",
+            "description": "Guarda la cita en DynamoDB y la envía a SNS"
+          }
+        },
+        "getByInsuredId": {
+          "handler": "src/handlers/appointment.getByInsuredId",
+          "events": [
+            {
+              "http": {
+                "path": "appointment/{insuredId}",
+                "method": "get",
+                "request": {
+                  "parameters": {
+                    "paths": {
+                      "insuredId": true
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "documentation": {
+            "summary": "Obtener citas",
+            "description": "Devuelve todas las citas de un asegurado"
+          }
+        }
+      }
+    },
+    "provider": {
+      "name": "aws",
+      "runtime": "nodejs20.x",
+      "region": "us-east-1",
+      "profile": "default",
+      "environment": {
+        "APPOINTMENTS_TABLE": "AppointmentsTable",
+        "APPOINTMENTS_TOPIC_ARN": {
+          "Ref": "AppointmentsSNSTopic"
+        },
+        "DB_HOST": "tu-rds-endpoint",
+        "DB_USER": "admin",
+        "DB_PASS": "clave123",
+        "DB_NAME": "appointments",
+        "EVENT_BUS_NAME": "AppointmentEventBus"
+      },
+      "iamRoleStatements": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "dynamodb:PutItem"
+          ],
+          "Resource": "arn:aws:dynamodb:us-east-1:*:table/AppointmentsTable"
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "sns:Publish"
+          ],
+          "Resource": [
+            {
+              "Ref": "AppointmentsSNSTopic"
+            }
+          ]
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "events:PutEvents"
+          ],
+          "Resource": "*"
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "dynamodb:UpdateItem"
+          ],
+          "Resource": {
+            "Fn::GetAtt": [
+              "AppointmentsTable",
+              "Arn"
+            ]
+          }
+        }
+      ],
+      "stage": "dev",
+      "versionFunctions": true
+    },
+    "dashboard": {
+      "isEnabledForService": false,
+      "requiredAuthentication": false,
+      "orgFeaturesInUse": null,
+      "orgObservabilityIntegrations": null,
+      "serviceAppId": null,
+      "serviceProvider": null,
+      "instanceParameters": null
+    },
+    "serviceRawFile": "service: appointment-service\r\n\r\nplugins:\r\n  - serverless-aws-documentation\r\n  - serverless-auto-swagger\r\n\r\nprovider:\r\n  name: aws\r\n  runtime: nodejs20.x\r\n  region: us-east-1\r\n  profile: default\r\n  environment:\r\n    APPOINTMENTS_TABLE: AppointmentsTable\r\n    APPOINTMENTS_TOPIC_ARN:\r\n      Ref: AppointmentsSNSTopic\r\n    DB_HOST: tu-rds-endpoint\r\n    DB_USER: admin\r\n    DB_PASS: clave123\r\n    DB_NAME: appointments\r\n    EVENT_BUS_NAME: AppointmentEventBus\r\n  iamRoleStatements:\r\n    - Effect: Allow\r\n      Action:\r\n        - dynamodb:PutItem\r\n      Resource:\r\n        - arn:aws:dynamodb:${self:provider.region}:*:table/AppointmentsTable\r\n    - Effect: Allow\r\n      Action:\r\n        - sns:Publish\r\n      Resource:\r\n        - Ref: AppointmentsSNSTopic\r\n    - Effect: Allow\r\n      Action:\r\n        - events:PutEvents\r\n      Resource: \"*\"\r\n    - Effect: Allow\r\n      Action:\r\n        - dynamodb:UpdateItem\r\n      Resource:\r\n        Fn::GetAtt: [AppointmentsTable, Arn]\r\n\r\nfunctions:\r\n  register:\r\n    handler: src/handlers/appointment.register\r\n    events:\r\n      - http:\r\n          path: appointment\r\n          method: post\r\n\r\n  appointment_pe:\r\n    handler: src/handlers/appointment_pe.handler\r\n    events:\r\n      - sqs:\r\n          arn:\r\n            Fn::GetAtt: [SQSPE, Arn]\r\n\r\n  appointment_cl:\r\n    handler: src/handlers/appointment_cl.handler\r\n    events:\r\n      - sqs:\r\n          arn:\r\n            Fn::GetAtt: [SQSCL, Arn]\r\n\r\n  updateStatus:\r\n    handler: src/handlers/appointment.updateStatus\r\n    events:\r\n      - sqs:\r\n          arn:\r\n            Fn::GetAtt: [AppointmentStatusQueue, Arn]\r\n  \r\n  getByInsuredId:\r\n    handler: src/handlers/appointment.getByInsuredId\r\n    events:\r\n      - http:\r\n          path: appointment/{insuredId}\r\n          method: get\r\n          request:\r\n            parameters:\r\n              paths:\r\n                insuredId: true\r\n\r\nresources:\r\n  Resources:\r\n    AppointmentsTable:\r\n      Type: AWS::DynamoDB::Table\r\n      Properties:\r\n        TableName: AppointmentsTable\r\n        AttributeDefinitions:\r\n          - AttributeName: insuredId\r\n            AttributeType: S\r\n          - AttributeName: scheduleId\r\n            AttributeType: N\r\n        KeySchema:\r\n          - AttributeName: insuredId\r\n            KeyType: HASH\r\n          - AttributeName: scheduleId\r\n            KeyType: RANGE\r\n        BillingMode: PAY_PER_REQUEST\r\n\r\n    AppointmentsSNSTopic:\r\n      Type: AWS::SNS::Topic\r\n      Properties:\r\n        TopicName: AppointmentsTopic\r\n\r\n    SQSPE:\r\n      Type: AWS::SQS::Queue\r\n      Properties:\r\n        QueueName: SQS_PE\r\n\r\n    SQSCL:\r\n      Type: AWS::SQS::Queue\r\n      Properties:\r\n        QueueName: SQS_CL\r\n\r\n    SQSPESubscription:\r\n      Type: AWS::SNS::Subscription\r\n      Properties:\r\n        TopicArn: !Ref AppointmentsSNSTopic\r\n        Protocol: sqs\r\n        Endpoint: !GetAtt SQSPE.Arn\r\n        FilterPolicy:\r\n          countryISO: [\"PE\"]\r\n        RawMessageDelivery: true\r\n\r\n    SQSCLSubscription:\r\n      Type: AWS::SNS::Subscription\r\n      Properties:\r\n        TopicArn: !Ref AppointmentsSNSTopic\r\n        Protocol: sqs\r\n        Endpoint: !GetAtt SQSCL.Arn\r\n        FilterPolicy:\r\n          countryISO: [\"CL\"]\r\n        RawMessageDelivery: true\r\n    \r\n    SQSPolicyPE:\r\n      Type: AWS::SQS::QueuePolicy\r\n      Properties:\r\n        Queues:\r\n          - !Ref SQSPE\r\n        PolicyDocument:\r\n          Statement:\r\n            - Effect: Allow\r\n              Principal: \"*\"\r\n              Action: \"SQS:SendMessage\"\r\n              Resource: !GetAtt SQSPE.Arn\r\n              Condition:\r\n                ArnEquals:\r\n                  \"aws:SourceArn\": !Ref AppointmentsSNSTopic\r\n\r\n    SQSPolicyCL:\r\n      Type: AWS::SQS::QueuePolicy\r\n      Properties:\r\n        Queues:\r\n          - !Ref SQSCL\r\n        PolicyDocument:\r\n          Statement:\r\n            - Effect: Allow\r\n              Principal: \"*\"\r\n              Action: \"SQS:SendMessage\"\r\n              Resource: !GetAtt SQSCL.Arn\r\n              Condition:\r\n                ArnEquals:\r\n                  \"aws:SourceArn\": !Ref AppointmentsSNSTopic\r\n\r\n    AppointmentEventBus:\r\n      Type: AWS::Events::EventBus\r\n      Properties:\r\n        Name: AppointmentEventBus\r\n\r\n    AppointmentStatusQueue:\r\n      Type: AWS::SQS::Queue\r\n      Properties:\r\n        QueueName: AppointmentStatusQueue\r\n\r\n    AppointmentStatusQueuePolicy:\r\n      Type: AWS::SQS::QueuePolicy\r\n      Properties:\r\n        Queues:\r\n          - !Ref AppointmentStatusQueue\r\n        PolicyDocument:\r\n          Statement:\r\n            - Effect: Allow\r\n              Principal: \"*\"\r\n              Action: \"SQS:SendMessage\"\r\n              Resource: !GetAtt AppointmentStatusQueue.Arn\r\n              Condition:\r\n                ArnEquals:\r\n                  aws:SourceArn: !GetAtt AppointmentEventRule.Arn\r\n\r\n    AppointmentEventRule:\r\n      Type: AWS::Events::Rule\r\n      Properties:\r\n        EventBusName: !Ref AppointmentEventBus\r\n        EventPattern:\r\n          detail-type:\r\n            - \"AppointmentCompleted\"\r\n        Targets:\r\n          - Arn: !GetAtt AppointmentStatusQueue.Arn\r\n            Id: \"SendToSQS\"\r\n\r\ncustom:\r\n  autoswagger:\r\n    title: 'Appointment API'\r\n    apiType: 'http'\r\n    generateSwaggerOnDeploy: true\r\n\r\n  documentation:\r\n    api:\r\n      info:\r\n        version: \"1.0.0\"\r\n        title: \"Appointment API\"\r\n        description: \"API para agendar citas médicas\"\r\n    models:\r\n      - name: AppointmentRequest\r\n        contentType: application/json\r\n        schema:\r\n          type: object\r\n          properties:\r\n            insuredId:\r\n              type: string\r\n            scheduleId:\r\n              type: number\r\n            countryISO:\r\n              type: string\r\n              enum: [PE, CL]\r\n          required: [insuredId, scheduleId, countryISO]\r\n\r\n  register:\r\n    handler: src/handlers/appointment.register\r\n    events:\r\n      - http:\r\n          path: appointment\r\n          method: post\r\n          request:\r\n            schemas:\r\n              application/json: AppointmentRequest\r\n    documentation:\r\n      summary: Registrar cita\r\n      description: Guarda la cita en DynamoDB y la envía a SNS\r\n\r\n  getByInsuredId:\r\n    handler: src/handlers/appointment.getByInsuredId\r\n    events:\r\n      - http:\r\n          path: appointment/{insuredId}\r\n          method: get\r\n          request:\r\n            parameters:\r\n              paths:\r\n                insuredId: true\r\n    documentation:\r\n      summary: Obtener citas\r\n      description: Devuelve todas las citas de un asegurado\r\n",
+    "command": [
+      "generate-swagger"
+    ],
+    "options": {},
+    "orgId": "4c1bf708-75de-4363-9e4b-8079a0f890c7",
+    "orgName": "judithportocarrero",
+    "userId": "dBcgqFtSWHvz8Tz2CR",
+    "userName": "judithportocarrero",
+    "serviceProviderAwsAccountId": "666908824721",
+    "serviceProviderAwsCfStackName": "appointment-service-dev",
+    "serviceProviderAwsCfStackId": "arn:aws:cloudformation:us-east-1:666908824721:stack/appointment-service-dev/1c0f6ff0-4015-11f0-858e-0affd11ecd01",
+    "serviceProviderAwsCfStackCreated": "2025-06-03T00:53:05.888Z",
+    "serviceProviderAwsCfStackUpdated": "2025-06-03T02:09:08.277Z",
+    "serviceProviderAwsCfStackStatus": "UPDATE_COMPLETE",
+    "serviceProviderAwsCfStackOutputs": [
+      {
+        "OutputKey": "AppointmentUnderscoreclLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:us-east-1:666908824721:function:appointment-service-dev-appointment_cl:7",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-appointment-service-dev-AppointmentUnderscoreclLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "UpdateStatusLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:us-east-1:666908824721:function:appointment-service-dev-updateStatus:5",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-appointment-service-dev-UpdateStatusLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "SwaggerJSONLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:us-east-1:666908824721:function:appointment-service-dev-swagger-json:1",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-appointment-service-dev-SwaggerJSONLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "GetByInsuredIdLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:us-east-1:666908824721:function:appointment-service-dev-getByInsuredId:4",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-appointment-service-dev-GetByInsuredIdLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "SwaggerUILambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:us-east-1:666908824721:function:appointment-service-dev-swagger-ui:1",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-appointment-service-dev-SwaggerUILambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "AwsDocApiId",
+        "OutputValue": "i0a0t8pqb9",
+        "Description": "API ID",
+        "ExportName": "sls-appointment-service-dev-AwsDocApiId"
+      },
+      {
+        "OutputKey": "RegisterLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:us-east-1:666908824721:function:appointment-service-dev-register:10",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-appointment-service-dev-RegisterLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "AppointmentUnderscorepeLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:us-east-1:666908824721:function:appointment-service-dev-appointment_pe:7",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-appointment-service-dev-AppointmentUnderscorepeLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "ServiceEndpoint",
+        "OutputValue": "https://i0a0t8pqb9.execute-api.us-east-1.amazonaws.com/dev",
+        "Description": "URL of the service endpoint",
+        "ExportName": "sls-appointment-service-dev-ServiceEndpoint"
+      },
+      {
+        "OutputKey": "ServerlessDeploymentBucketName",
+        "OutputValue": "serverless-framework-deployments-us-east-1-e82c6d93-c360",
+        "ExportName": "sls-appointment-service-dev-ServerlessDeploymentBucketName"
+      }
+    ]
+  }
+}
